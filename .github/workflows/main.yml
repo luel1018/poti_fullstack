@@ -1,18 +1,42 @@
 name: fullstack deployment
 on:
-	push:
-		branches: [main]
+  push:
+    branches: [main]
 jobs:
-	deply:
-		name: deploy
-		runs-on: ubuntu-latest
-		steps:
-			-name : run ssh
-			uses: appleboy/ssh-action@v1
-			with:
-				host: ${{ secrets.HOST }}
-				username: ${{ secrets.USERNAME }}
-				key: ${{ secrets.SSH_KEY }}
-				port: ${{ secrets.PORT }}
-				script: |
-					echo test > /tmp/test
+  build-and-deply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Build with Gradle
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean bootJar
+
+      - name: Docker Login
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build with Docker
+        run: |
+          docker build -t luel1018/backend:latest .
+          docker push luel1018/backend:latest
+
+      - name : run ssh
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.PORT }}
+          script: |
+            echo test > /tmp/test
