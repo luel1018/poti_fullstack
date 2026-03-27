@@ -8,6 +8,7 @@ import { namecardListStore } from '@/stores/namecardListStore.js'
 import useAuthStore from '@/stores/useAuthStore'
 import api from '@/api/user/index.js'
 import matchingApi from '@/api/matching'
+import noticeApi from '@/api/notice/index.js'
 
 const router = useRouter()
 
@@ -15,6 +16,7 @@ const getUserInfo = async () => {
   const authStore = useAuthStore()
   try {
     const res = await api.getMyInfo()
+    console.log(res.data)
     authStore.login(res.data)
     return res
   } catch (error) {
@@ -22,7 +24,7 @@ const getUserInfo = async () => {
   }
 }
 
-const pageOfToday = 45
+const pageOfToday = 1
 
 const store = namecardListStore()
 
@@ -31,6 +33,9 @@ const isLoading = ref(true)
 
 const recommendJobs = ref([])
 const recommendLoading = ref(false)
+
+const notices = ref([])
+const noticeLoading = ref(false)
 
 const loadMyCardList = async () => {
   isLoading.value = true
@@ -54,6 +59,20 @@ const loadRecommendations = async () => {
   }
 }
 
+const loadNotices = async () => {
+  noticeLoading.value = true
+  try {
+    const res = await noticeApi.getNoticeList(0, 3)
+    const pageData = res?.data || {}
+    notices.value = Array.isArray(pageData.content) ? pageData.content : []
+  } catch (error) {
+    console.error(error.message)
+    notices.value = []
+  } finally {
+    noticeLoading.value = false
+  }
+}
+
 const toggleJobFavorite = async (job) => {
   try {
     const res = await matchingApi.toggleFavorite(job.id)
@@ -72,10 +91,25 @@ const goRecommendDetail = (jobId) => {
   })
 }
 
+const goNoticeList = () => {
+  router.push('/notice')
+}
+
+const goNoticeDetail = (noticeIdx) => {
+  router.push(`/notice/${noticeIdx}`)
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`
+}
+
 onMounted(() => {
   loadMyCardList()
   getUserInfo()
   loadRecommendations()
+  loadNotices()
 })
 
 // 45부터 55까지 숫자가 담긴 배열 생성
@@ -181,17 +215,17 @@ const getMiniCardStyle = (idx) => {
               </span>
             </div>
             <transition name="card-switch" mode="out-in">
-              
-              <div :key="selectedIdx"
+              <div
+                :key="selectedIdx"
                 class="perspective-container relative w-full max-w-md aspect-[1.58/1] cursor-pointer"
-                @click="isFlipped = !isFlipped">
+                @click="isFlipped = !isFlipped"
+              >
                 <div
                   class="card-object w-full h-full relative shadow-[0_20px_50px_rgba(0,0,0,0.1)] rounded-2xl duration-700"
-                  :class="{ 'is-flipped': isFlipped }">
-
+                  :class="{ 'is-flipped': isFlipped }"
+                >
                   <div class="card-face card-front">
                     <NamecardsFront :cardInfo="cardList[selectedIdx]" />
-                    
 
                     <div class="absolute bottom-4 right-4 z-20 text-xs text-gray-400 animate-pulse pointer-events-none">
                       Click to flip <i class="fa-solid fa-rotate ml-1"></i>
@@ -233,20 +267,28 @@ const getMiniCardStyle = (idx) => {
             class="col-span-8 bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] h-[240px] flex flex-col">
             <div class="flex justify-between items-center mb-6">
               <h3 class="text-lg font-black flex items-center gap-2 text-slate-800">📢 공지사항</h3>
-              <button class="text-xs text-slate-400 font-bold hover:text-yellow-600 transition-colors">
+              <button
+                @click="goNoticeList"
+                class="text-xs text-slate-400 font-bold hover:text-yellow-600 transition-colors">
                 전체보기 +
               </button>
             </div>
             <div class="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-50">
-              <div
-                v-for="i in 3"
-                :key="i"
-                class="p-4 flex items-center justify-between bg-white hover:bg-slate-50 transition cursor-pointer">
-                <div class="flex items-center gap-4">
-                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-sm"></span>
-                  <span class="text-sm font-semibold text-slate-700">기업 계정 권한(멤버 초대) 기능 업데이트 안내</span>
+              <button
+                v-for="notice in notices"
+                :key="notice.idx"
+                type="button"
+                @click="goNoticeDetail(notice.idx)"
+                class="w-full p-4 flex items-center justify-between bg-white hover:bg-slate-50 transition cursor-pointer text-left">
+                <div class="flex items-center gap-4 min-w-0">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-sm shrink-0"></span>
+                  <span class="text-sm font-semibold text-slate-700 truncate">{{ notice.title }}</span>
                 </div>
-                <span class="text-xs text-slate-400 font-mono font-medium">2026.01.17</span>
+                <span class="text-xs text-slate-400 font-mono font-medium shrink-0">{{ formatDate(notice.createdAt) }}</span>
+              </button>
+
+              <div v-if="!noticeLoading && notices.length === 0" class="p-6 text-center text-sm font-bold text-slate-400">
+                등록된 공지사항이 없습니다.
               </div>
             </div>
           </div>
@@ -349,6 +391,7 @@ const getMiniCardStyle = (idx) => {
   opacity: 0;
   transform: translateY(-15px);
 }
+
 
 /* 부모 컨테이너: 3D 효과의 깊이감 설정 */
 .perspective-container {

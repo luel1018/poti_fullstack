@@ -1,6 +1,10 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import matchingApi from '@/api/matching'
+
+const route = useRoute()
+const router = useRouter()
 
 const companies = ref([])
 const loading = ref(false)
@@ -67,6 +71,37 @@ const loadCompanies = async () => {
   }
 }
 
+const buildLoginRedirect = () => {
+  return {
+    path: '/login',
+    query: {
+      type: 'personal',
+      redirect: route.fullPath || '/matching',
+    },
+  }
+}
+
+const requirePersonalLogin = () => {
+  if (localStorage.getItem('USERINFO')) {
+    return true
+  }
+
+  alert('로그인이 필요한 기능입니다. 개인계정으로 로그인해 주세요.')
+  router.push(buildLoginRedirect())
+  return false
+}
+
+const syncCompany = (companyId, payload = {}) => {
+  const target = companies.value.find((company) => company.id === companyId)
+  if (target) {
+    Object.assign(target, payload)
+  }
+
+  if (selectedCompany.value && selectedCompany.value.id === companyId) {
+    Object.assign(selectedCompany.value, payload)
+  }
+}
+
 const openDetail = async (companyId) => {
   detailLoading.value = true
 
@@ -74,13 +109,14 @@ const openDetail = async (companyId) => {
     const detail = await matchingApi.detail(companyId)
     selectedCompany.value = detail
 
-    const target = companies.value.find((company) => company.id === companyId)
-    if (target) {
-      target.views = detail.views
-      target.likes = detail.likes
-      target.isFavorite = detail.isFavorite
-      target.detail = detail.detail
-    }
+    syncCompany(companyId, {
+      views: detail.views,
+      likes: detail.likes,
+      isFavorite: detail.isFavorite,
+      isApplied: detail.isApplied,
+      isMine: detail.isMine,
+      detail: detail.detail,
+    })
   } catch (error) {
     alert(error.message || '상세 정보를 불러오지 못했습니다.')
   } finally {
@@ -88,8 +124,17 @@ const openDetail = async (companyId) => {
   }
 }
 
-const closeDetail = () => {
+const closeDetail = async () => {
   selectedCompany.value = null
+
+  if (route.query.jobId) {
+    const nextQuery = { ...route.query }
+    delete nextQuery.jobId
+    await router.replace({
+      path: route.path,
+      query: nextQuery,
+    })
+  }
 }
 
 const toggleFavorite = async (company) => {
@@ -110,6 +155,67 @@ const toggleFavorite = async (company) => {
     }
   } catch (error) {
     alert(error.message || '즐겨찾기 처리에 실패했습니다.')
+  }
+}
+
+const applyCompany = async (company) => {
+  if (!company || company.isApplied || company.isMine) return
+
+  if (!requirePersonalLogin()) {
+    return
+  }
+
+  try {
+    const res = await matchingApi.apply(company.id)
+    const result = res?.data || {}
+
+    syncCompany(company.id, {
+      isApplied: Boolean(result.applied),
+    })
+
+    alert('지원이 완료되었습니다.')
+  } catch (error) {
+    const message = error?.message || '지원 처리에 실패했습니다.'
+
+    if (message.includes('로그인')) {
+      alert('로그인이 필요한 기능입니다. 개인계정으로 로그인해 주세요.')
+      router.push(buildLoginRedirect())
+      return
+    }
+
+    alert(message)
+  }
+}
+
+const cancelCompany = async (company) => {
+  if (!company || !company.isApplied || company.isMine) return
+
+  if (!requirePersonalLogin()) {
+    return
+  }
+
+  const confirmed = window.confirm('지원한 공고를 취소할까요?')
+  if (!confirmed) return
+
+  try {
+    const res = await matchingApi.cancelApply(company.id)
+    const result = res?.data || {}
+
+    syncCompany(company.id, {
+      isApplied: Boolean(result.applied),
+    })
+
+    alert('지원이 취소되었습니다.')
+  } catch (error) {
+    const message = error?.message || '지원 취소에 실패했습니다.'
+
+    if (message.includes('로그인')) {
+      alert('로그인이 필요한 기능입니다. 개인계정으로 로그인해 주세요.')
+      router.push(buildLoginRedirect())
+      return
+    }
+
+    alert(message)
   }
 }
 
@@ -151,8 +257,13 @@ const goNext = () => {
   page.value = Math.min(totalPages.value, page.value + 1)
 }
 
-onMounted(() => {
-  loadCompanies()
+onMounted(async () => {
+  await loadCompanies()
+
+  const jobId = Number(route.query.jobId)
+  if (!Number.isNaN(jobId) && jobId > 0) {
+    await openDetail(jobId)
+  }
 })
 </script>
 
@@ -255,11 +366,24 @@ onMounted(() => {
         <article
           v-for="c in pagedCompanies"
           :key="c.id"
-          class="rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-6 hover:border-amber-300 transition shadow-sm"
+          :class="[
+            'rounded-3xl border bg-white dark:bg-zinc-900 p-6 transition shadow-sm',
+            c.isMine
+              ? 'border-amber-300 ring-2 ring-amber-200/70 bg-amber-50/40 dark:bg-zinc-900'
+              : 'border-zinc-200 dark:border-zinc-800 hover:border-amber-300',
+          ]"
         >
           <div class="flex items-start justify-between gap-3">
             <div>
-              <p class="text-sm text-zinc-500 font-bold">{{ c.category }} · {{ c.location || '미정' }}</p>
+              <div class="flex items-center gap-2 flex-wrap">
+                <p class="text-sm text-zinc-500 font-bold">{{ c.category }} · {{ c.location || '미정' }}</p>
+                <span
+                  v-if="c.isMine"
+                  class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-black"
+                >
+                  내 공고
+                </span>
+              </div>
               <h3 class="mt-2 text-2xl font-black leading-tight">{{ c.name }}</h3>
               <p class="mt-1 text-lg font-bold text-zinc-700 dark:text-zinc-200">{{ c.role }}</p>
               <p class="mt-1 text-zinc-500 font-medium">{{ c.exp }}</p>
@@ -283,14 +407,36 @@ onMounted(() => {
             </span>
           </div>
 
-          <div class="mt-6 flex items-center justify-between">
+          <div class="mt-6 flex items-center justify-between gap-2">
             <div class="text-sm text-zinc-400 font-bold">업데이트: {{ c.updatedAt || '-' }}</div>
-            <button
-              @click="openDetail(c.id)"
-              class="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-zinc-900 font-black"
-            >
-              보기
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                v-if="!c.isMine && c.isApplied"
+                @click="cancelCompany(c)"
+                class="px-4 py-3 rounded-2xl font-black border border-rose-200 text-rose-500 hover:bg-rose-50"
+              >
+                지원취소
+              </button>
+              <button
+                v-else
+                @click="applyCompany(c)"
+                :disabled="c.isMine"
+                :class="[
+                  'px-4 py-3 rounded-2xl font-black border',
+                  c.isMine
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 cursor-default'
+                    : 'bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-900',
+                ]"
+              >
+                {{ c.isMine ? '내 공고' : '지원하기' }}
+              </button>
+              <button
+                @click="openDetail(c.id)"
+                class="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-zinc-900 font-black"
+              >
+                보기
+              </button>
+            </div>
           </div>
         </article>
       </section>
@@ -321,7 +467,15 @@ onMounted(() => {
       <div class="relative w-full max-w-3xl rounded-[28px] border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-7 shadow-2xl max-h-[85vh] overflow-y-auto">
         <div class="flex items-start justify-between gap-4">
           <div>
-            <p class="text-sm text-zinc-500 font-bold">{{ selectedCompany.category }} · {{ selectedCompany.location || '미정' }}</p>
+            <div class="flex items-center gap-2 flex-wrap">
+              <p class="text-sm text-zinc-500 font-bold">{{ selectedCompany.category }} · {{ selectedCompany.location || '미정' }}</p>
+              <span
+                v-if="selectedCompany.isMine"
+                class="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-black"
+              >
+                내 공고
+              </span>
+            </div>
             <h2 class="mt-2 text-3xl font-black">{{ selectedCompany.name }}</h2>
             <p class="mt-1 text-xl font-bold text-zinc-700 dark:text-zinc-200">{{ selectedCompany.role }}</p>
           </div>
@@ -381,6 +535,35 @@ onMounted(() => {
               </p>
             </div>
           </section>
+
+          <div class="mt-8 flex items-center justify-end gap-2 pt-4 border-t border-zinc-200 dark:border-zinc-800">
+            <button
+              v-if="!selectedCompany.isMine && selectedCompany.isApplied"
+              @click="cancelCompany(selectedCompany)"
+              class="px-5 py-3 rounded-2xl font-black border border-rose-200 text-rose-500 hover:bg-rose-50"
+            >
+              지원취소
+            </button>
+            <button
+              v-else
+              @click="applyCompany(selectedCompany)"
+              :disabled="selectedCompany.isMine"
+              :class="[
+                'px-5 py-3 rounded-2xl font-black border',
+                selectedCompany.isMine
+                  ? 'bg-amber-50 text-amber-700 border-amber-200 cursor-default'
+                  : 'bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-900',
+              ]"
+            >
+              {{ selectedCompany.isMine ? '내 공고' : '지원하기' }}
+            </button>
+            <button
+              @click="closeDetail"
+              class="px-5 py-3 rounded-2xl bg-amber-400 hover:bg-amber-300 text-zinc-900 font-black"
+            >
+              닫기
+            </button>
+          </div>
         </div>
       </div>
     </div>
