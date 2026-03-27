@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   db:
     image: mariadb:latest
     restart: always
+    container_name: db
     environment:
       - MARIADB_DATABASE=web
       - MARIADB_ROOT_PASSWORD=qwer1234
@@ -14,16 +13,15 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: ./
       dockerfile: Dockerfile
+    container_name: backend
     ports:
       - "8080:8080"
     env_file:
-      - ./backend/.env
-    environment:
-      - DB_URL=jdbc:mariadb://db:3306/web
-      - DB_USER=root
-      - DB_PASS=qwer1234
+      - ./.env
+    volumes:
+      - ./uploads:/app/uploads
     depends_on:
       - db
 
@@ -31,6 +29,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+    container_name: frontend
     ports:
       - "80:80"
     depends_on:
