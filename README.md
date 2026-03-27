@@ -10,11 +10,9 @@
 
 <div align="center">
 
-| **김민규** |
-
-| :---: |
-
 | <img src="https://avatars.githubusercontent.com/u/244694024?v=4" width="120" style="border-radius:50%"/> |
+
+| **김민규** |
 
 | [@luel1018](https://github.com/luel1018) |
 
