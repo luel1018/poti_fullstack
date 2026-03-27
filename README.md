@@ -36,7 +36,7 @@
 |:---------------|:----------------------------------------------------------------------------------|
 | **🌐 홈페이지**    | [www.poticard.kro.kr](https://www.poticard.kro.kr)                                |
 | **📖 API 명세서** | [Swagger UI](https://api.poticard.kro.kr/swagger-ui/index.html)                   |
-| **📖 상세 설명**   | [Poticard WIKI]([https://github.com/beyond-sw-camp/be24-3rd-DevOops-Poticard/wiki](https://github.com/luel1018/poti_fullstack/wiki)) |
+| **📖 상세 설명**   | [Poticard WIKI](https://github.com/luel1018/poti_fullstack/wiki)) |
 ---
 
 ## 🔨️ 기술 스택
